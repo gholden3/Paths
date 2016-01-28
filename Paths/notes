@@ -1,0 +1,4 @@
+1. current device support: size classes (and autolayout) disabled. So support will be only iphone 5, 5c, & 5s (320pts wide, 568pts tall).
+
+2. reverse geocoding - think aobu tcaching cordinates -> addresses in some sort of data structure to make lookups fast and save the iphone's radio signals. Apple also limits how fast/many requests you can send them.
+3. how do deal with bike rides, car rides? Get a location every 5 meters. Fetch interval = (5sec)*(velocity in mps).
