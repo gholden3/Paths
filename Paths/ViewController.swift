@@ -162,17 +162,29 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
         let request = NSMutableURLRequest(URL: url!)
         let session = NSURLSession.sharedSession()
         request.HTTPMethod = "POST"
-        var params = [String : String]()
-        params = ["time":"\(newLocation.timestamp)", "pos":"pos:\(newLocation.coordinate)"]
-        let data : NSData = NSKeyedArchiver.archivedDataWithRootObject(params)
-        //let err: NSError?
+        //var params = [String : String]()
+        //params = ["time":"\(newLocation.timestamp)", "pos":"pos:\(newLocation.coordinate)"]
+       // let data : NSData = NSKeyedArchiver.archivedDataWithRootObject(params)
+        
+        let jsonObject: [String: AnyObject] = [
+            "timestamp": "\(newLocation.timestamp)",
+            "location": "\(newLocation.coordinate)"
+        ]
+        
+        let valid = NSJSONSerialization.isValidJSONObject(jsonObject)
+        if(valid){
+        //let data : NSData = [{"key":"value", "key":"value"}]
+        //NSJSONSerialization.dataWithJSONObject(para, options: NSJSONWritingOptions())
         do {
-            if let body = try NSJSONSerialization.JSONObjectWithData(data as NSData, options: []) as? NSData {
-                print(body)
-                request.HTTPBody = body
-            }
+            request.HTTPBody =  try NSJSONSerialization.dataWithJSONObject(jsonObject, options: [])
+            
         } catch let error as NSError {
-            print(error.localizedDescription)
+            print("there was an error")
+            print("\(error)")
+            request.HTTPBody = nil
+            } }
+        else {
+            print("not a valid json object")
         }
         //request.HTTPBody = NSJSONSerialization.dataWithJSONObject(params, options: nil, error:&err)
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
