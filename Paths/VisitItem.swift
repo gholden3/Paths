@@ -11,4 +11,5 @@ import Foundation
 class VisitItem {
     var coordinates = ""
     var duration = ""
+    var user = "gholden3"
 }

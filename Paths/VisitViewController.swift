@@ -20,11 +20,13 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
         let row0item = VisitItem()
         row0item.coordinates = "coordinates here"
         row0item.duration = "duration here"
+        row0item.user = "gholden3"
         visits.append(row0item)
         
         let row1item = VisitItem()
         row1item.coordinates = "coordinates2"
         row1item.duration = "duration 2"
+        row1item.user = "gholden3"
         visits.append(row1item)
         
         super.init(coder: aDecoder)
@@ -44,7 +46,7 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.requestAlwaysAuthorization()
-        locationManager.startMonitoringVisits()
+        locationManager.startUpdatingLocation()
         //updateLabels()
         //configureGetButton()
         // Do any additional setup after loading the view, typically from a nib.
@@ -59,6 +61,7 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
     }
     
     override func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        print("visits.count: " + "\(visits.count)")
         return visits.count
     }
     
@@ -76,7 +79,7 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
     
     func configureTextForCell(cell: UITableViewCell, withVisitItem visit: VisitItem) {
         let label = cell.viewWithTag(1000) as! UILabel
-        label.text = "\(visit.coordinates)  " + "\(visit.duration)"
+        label.text = "\(visit.user)" + " visited: " + "\(visit.coordinates)  " + "\(visit.duration)"
     }
 
     func sendVisitToServer(visit: VisitItem){
@@ -85,6 +88,7 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
         let session = NSURLSession.sharedSession()
         request.HTTPMethod = "POST"
         let jsonObject: [String: AnyObject] = [
+            "user:": "\(visit.user)",
             "duration": "\(visit.duration)",
             "location": "\(visit.coordinates)"
         ]
@@ -106,7 +110,9 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
         let task = session.dataTaskWithRequest(request, completionHandler: {data, response, error -> Void in
-            print("Response: \(response)")})
+            print("Response:")})
+        //let task = session.dataTaskWithRequest(request, completionHandler: {data, response, error -> Void in
+                //print("Response: \(response)")})
         task.resume()
     }
     
@@ -123,16 +129,61 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
         let interval = date2.timeIntervalSinceDate(date1)
         let duration = dateComponentsFormatter.stringFromTimeInterval(interval)
         newItem.duration = " \(duration)"
+        newItem.user = "gholden3"
         visits.append(newItem)
         sendVisitToServer(newItem)
     }
+    
+    func locationManager(manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) { //delegate method woo
+        print("updated location")
+        lastLocationError = nil
+        //extract data from location object
+        let newLocation = locations.last! //locations is an array of CLLocation s
+        let lat:String = "\(newLocation.coordinate.latitude)"
+        let long:String = "\(newLocation.coordinate.longitude)"
+        //for now just put the timestamp from location into duration for visit
+        let dateFormatter = NSDateFormatter()
+        dateFormatter.dateStyle = .MediumStyle
+        let timestamp = newLocation.timestamp
+        let duration = dateFormatter.stringFromDate(timestamp)
+        let newItem = VisitItem()
+        newItem.coordinates = "lat: " + lat + "long: " + long
+        newItem.duration = duration
+        newItem.user = "gholden3"
+        visits.append(newItem)
+        tableView.reloadData()
+        sendVisitToServer(newItem)
+        
+        
+        //println("visit: \(visit.coordinate.latitude),\(visit.coordinate.longitude)")
+        numVisits++
+        // 3
+        //if new reading is more accurate (smaller error)
+        // or this is the first location you are recieving
+        //notice the foce unwrapping!
+        /*if location == nil || location!.horizontalAccuracy > newLocation.horizontalAccuracy {
+        // 4
+        lastLocationError = nil
+        location = newLocation
+        updateLabels()
+        // 5
+        if newLocation.horizontalAccuracy <= locationManager.desiredAccuracy { //you have enough accuracy
+        print("*** We're done!")
+        stopLocationManager()
+        configureGetButton()
+        }
+        }*/
+        
+    }
+
+    
     func locationManager(manager: CLLocationManager, didFailWithError error: NSError) {
         print("didFailWithError \(error)")
         if error.code == CLError.LocationUnknown.rawValue { //it just can't get a location rn
             return
         }
         lastLocationError = error //you got a more serious error
-        locationManager.stopMonitoringVisits() //obtaining a location seems to be impossible for where the user is. stop location man
+        locationManager.stopUpdatingLocation() //obtaining a location seems to be impossible for where the user is. stop location man
         let newItem = VisitItem()
         newItem.coordinates = "ERROR:  "
         let duration = "\(error)"
@@ -247,76 +298,7 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
     }
     
     
-    func locationManager(manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) { //delegate method woo
-        let newLocation = locations.last! //locations is an array of CLLocation s
-        print("didUpdateLocations \(newLocation)")
-        message = "didUpdateLocations \(newLocation)"
-        /*if newLocation.timestamp.timeIntervalSinceNow < -5 { //ignore if it is too old
-            return
-        } */
-        // 2
-        if newLocation.horizontalAccuracy < 0 { //invalid
-            return
-        }
-        lastLocationError = nil
-        location = newLocation
-        updateLabels()
-        let url = NSURL(string:"http://54.174.70.236:8097")
-        let request = NSMutableURLRequest(URL: url!)
-        let session = NSURLSession.sharedSession()
-        request.HTTPMethod = "POST"
-        //var params = [String : String]()
-        //params = ["time":"\(newLocation.timestamp)", "pos":"pos:\(newLocation.coordinate)"]
-       // let data : NSData = NSKeyedArchiver.archivedDataWithRootObject(params)
-        
-        let jsonObject: [String: AnyObject] = [
-            "timestamp": "\(newLocation.timestamp)",
-            "location": "\(newLocation.coordinate)"
-        ]
-        
-        let valid = NSJSONSerialization.isValidJSONObject(jsonObject)
-        if(valid){
-        //let data : NSData = [{"key":"value", "key":"value"}]
-        //NSJSONSerialization.dataWithJSONObject(para, options: NSJSONWritingOptions())
-        do {
-            request.HTTPBody =  try NSJSONSerialization.dataWithJSONObject(jsonObject, options: [])
-            
-        } catch let error as NSError {
-            print("there was an error")
-            print("\(error)")
-            request.HTTPBody = nil
-            } }
-        else {
-            print("not a valid json object")
-        }
-        //request.HTTPBody = NSJSONSerialization.dataWithJSONObject(params, options: nil, error:&err)
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-        
-        let task = session.dataTaskWithRequest(request, completionHandler: {data, response, error -> Void in
-            print("Response: \(response)")})
-        
-        task.resume()
-        // 3
-        //if new reading is more accurate (smaller error)
-        // or this is the first location you are recieving
-        //notice the foce unwrapping!
-        /*if location == nil || location!.horizontalAccuracy > newLocation.horizontalAccuracy {
-            // 4
-            lastLocationError = nil
-            location = newLocation
-            updateLabels()
-            // 5
-            if newLocation.horizontalAccuracy <= locationManager.desiredAccuracy { //you have enough accuracy
-                print("*** We're done!")
-                stopLocationManager()
-                configureGetButton()
-            }
-        }*/
-        
-    }
     */
-    
 }
 
 
