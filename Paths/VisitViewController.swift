@@ -9,22 +9,29 @@
 import UIKit
 import CoreLocation
 
-class ViewController: UIViewController, CLLocationManagerDelegate {
-    
-    let locationManager = CLLocationManager()
-    var location: CLLocation?
-    var updatingLocation = false
+class VisitViewController: UITableViewController, CLLocationManagerDelegate {
+    var numVisits = 2
+    var visits: [VisitItem]
+    var locationManager: CLLocationManager = CLLocationManager()
     var lastLocationError: NSError?
-    var message = "hello"
+    required init?(coder aDecoder: NSCoder) {
+        visits = [VisitItem]()
+        
+        let row0item = VisitItem()
+        row0item.coordinates = "coordinates here"
+        row0item.duration = "duration here"
+        visits.append(row0item)
+        
+        let row1item = VisitItem()
+        row1item.coordinates = "coordinates2"
+        row1item.duration = "duration 2"
+        visits.append(row1item)
+        
+        super.init(coder: aDecoder)
+    }
 
-    @IBOutlet weak var messageLabel: UILabel!
-    @IBOutlet weak var latitudeLabel: UILabel!
-    @IBOutlet weak var longitudeLabel: UILabel!
-    @IBOutlet weak var addressLabel: UILabel!
-    @IBOutlet weak var tagButton: UIButton!
-    @IBOutlet weak var getButton: UIButton!
-    
-    @IBAction func getLocation() { // called when user taps get location button
+    override func viewDidLoad() {
+        super.viewDidLoad()
         let authStatus = CLLocationManager.authorizationStatus()
         if authStatus == .NotDetermined {
             locationManager.requestAlwaysAuthorization()
@@ -34,6 +41,122 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
             showLocationServicesDeniedAlert()
             return
         }
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.requestAlwaysAuthorization()
+        locationManager.startMonitoringVisits()
+        //updateLabels()
+        //configureGetButton()
+        // Do any additional setup after loading the view, typically from a nib.
+    }
+    
+    func showLocationServicesDeniedAlert() {
+        let alert = UIAlertController(title: "Location Services Disabled",
+            message: "Please enable location services for this app in Settings.", preferredStyle: .Alert)
+        let okAction = UIAlertAction(title: "OK", style: .Default, handler: nil)
+        presentViewController(alert, animated: true, completion: nil)
+        alert.addAction(okAction)
+    }
+    
+    override func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return visits.count
+    }
+    
+    override func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
+        
+        let cell = tableView.dequeueReusableCellWithIdentifier("VisitItem", forIndexPath: indexPath)
+        
+        let visit = visits[indexPath.row]
+        
+        configureTextForCell(cell, withVisitItem: visit)
+        //configureCheckmarkForCell(cell, withChecklistItem: item)
+        
+        return cell
+    }
+    
+    func configureTextForCell(cell: UITableViewCell, withVisitItem visit: VisitItem) {
+        let label = cell.viewWithTag(1000) as! UILabel
+        label.text = "\(visit.coordinates)  " + "\(visit.duration)"
+    }
+
+    func sendVisitToServer(visit: VisitItem){
+        let url = NSURL(string:"http://54.174.70.236:8097")
+        let request = NSMutableURLRequest(URL: url!)
+        let session = NSURLSession.sharedSession()
+        request.HTTPMethod = "POST"
+        let jsonObject: [String: AnyObject] = [
+            "duration": "\(visit.duration)",
+            "location": "\(visit.coordinates)"
+        ]
+        
+        let valid = NSJSONSerialization.isValidJSONObject(jsonObject)
+        if(valid){
+            do {
+                request.HTTPBody =  try NSJSONSerialization.dataWithJSONObject(jsonObject, options: [])
+                
+            } catch let error as NSError {
+                print("there was an error")
+                print("\(error)")
+                request.HTTPBody = nil
+            }
+        } else {
+            print("not a valid json object")
+        }
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let task = session.dataTaskWithRequest(request, completionHandler: {data, response, error -> Void in
+            print("Response: \(response)")})
+        task.resume()
+    }
+    
+    func locationManager(manager: CLLocationManager, didVisit visit: CLVisit)
+    {
+        let dateComponentsFormatter = NSDateComponentsFormatter()
+        dateComponentsFormatter.unitsStyle = NSDateComponentsFormatterUnitsStyle.Full
+        //println("visit: \(visit.coordinate.latitude),\(visit.coordinate.longitude)")
+        numVisits++
+        let newItem = VisitItem()
+        newItem.coordinates = "\(visit.coordinate)"
+        let date2 = visit.departureDate
+        let date1 = visit.arrivalDate
+        let interval = date2.timeIntervalSinceDate(date1)
+        let duration = dateComponentsFormatter.stringFromTimeInterval(interval)
+        newItem.duration = " \(duration)"
+        visits.append(newItem)
+        sendVisitToServer(newItem)
+    }
+    func locationManager(manager: CLLocationManager, didFailWithError error: NSError) {
+        print("didFailWithError \(error)")
+        if error.code == CLError.LocationUnknown.rawValue { //it just can't get a location rn
+            return
+        }
+        lastLocationError = error //you got a more serious error
+        locationManager.stopMonitoringVisits() //obtaining a location seems to be impossible for where the user is. stop location man
+        let newItem = VisitItem()
+        newItem.coordinates = "ERROR:  "
+        let duration = "\(error)"
+        newItem.duration = "arr: \(duration)"
+        visits.append(newItem)
+        //updateLabels()
+        //configureGetButton()
+    }
+
+    /*
+    var location: CLLocation?
+    var updatingLocation = false
+    
+    var message = "hello" */
+/*
+    @IBOutlet weak var messageLabel: UILabel!
+    @IBOutlet weak var latitudeLabel: UILabel!
+    @IBOutlet weak var longitudeLabel: UILabel!
+    @IBOutlet weak var addressLabel: UILabel!
+    @IBOutlet weak var tagButton: UIButton!
+    @IBOutlet weak var getButton: UIButton!
+    
+    @IBAction func getLocation() { // called when user taps get location button
+    
         if updatingLocation { //stop button was pressed
             stopLocationManager()
         } else { //get location was pressed
@@ -45,25 +168,14 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
         configureGetButton()
     }
     
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        updateLabels()
-        configureGetButton()
-        // Do any additional setup after loading the view, typically from a nib.
-    }
+   
     
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
         // Dispose of any resources that can be recreated.
     }
     
-    func showLocationServicesDeniedAlert() {
-        let alert = UIAlertController(title: "Location Services Disabled",
-            message: "Please enable location services for this app in Settings.", preferredStyle: .Alert)
-        let okAction = UIAlertAction(title: "OK", style: .Default, handler: nil)
-        presentViewController(alert, animated: true, completion: nil)
-        alert.addAction(okAction)
-    }
+    
     
     func updateLabels() {
         //unwrap since optional
@@ -127,16 +239,7 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
     
     // MARK: - CLLocationManagerDelegate
     
-    func locationManager(manager: CLLocationManager, didFailWithError error: NSError) {
-        print("didFailWithError \(error)")
-        if error.code == CLError.LocationUnknown.rawValue { //it just can't get a location rn
-            return
-        }
-        lastLocationError = error //you got a more serious error
-        stopLocationManager() //obtaining a location seems to be impossible for where the user is. stop location man
-        updateLabels()
-        configureGetButton()
-    }
+   
     
     
     func locationManager(manager: CLLocationManager, didFinishDeferredUpdatesWithError error: NSError?) {
@@ -212,7 +315,7 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
         }*/
         
     }
-    
+    */
     
 }
 
