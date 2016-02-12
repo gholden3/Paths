@@ -11,6 +11,7 @@ import CoreLocation
 
 class VisitViewController: UITableViewController, CLLocationManagerDelegate {
     var numVisits = 2
+    var insideFence = false;
     var visits: [VisitItem]
     var locationManager: CLLocationManager = CLLocationManager()
     var lastLocationError: NSError?
@@ -21,12 +22,14 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
         row0item.coordinates = "coordinates here"
         row0item.duration = "duration here"
         row0item.user = "gholden3"
+        row0item.timestamp = "01"
         visits.append(row0item)
         
         let row1item = VisitItem()
         row1item.coordinates = "coordinates2"
         row1item.duration = "duration 2"
         row1item.user = "gholden3"
+        row1item.timestamp = "02"
         visits.append(row1item)
         
         super.init(coder: aDecoder)
@@ -52,6 +55,7 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
         // Do any additional setup after loading the view, typically from a nib.
     }
     
+
     func showLocationServicesDeniedAlert() {
         let alert = UIAlertController(title: "Location Services Disabled",
             message: "Please enable location services for this app in Settings.", preferredStyle: .Alert)
@@ -79,7 +83,7 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
     
     func configureTextForCell(cell: UITableViewCell, withVisitItem visit: VisitItem) {
         let label = cell.viewWithTag(1000) as! UILabel
-        label.text = "\(visit.user)" + " visited: " + "\(visit.coordinates)  " + "\(visit.duration)"
+        label.text = " visit. time: "  + "\(visit.timestamp)"
     }
 
     func sendVisitToServer(visit: VisitItem){
@@ -90,7 +94,8 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
         let jsonObject: [String: AnyObject] = [
             "user:": "\(visit.user)",
             "duration": "\(visit.duration)",
-            "location": "\(visit.coordinates)"
+            "location": "\(visit.coordinates)",
+            "time": "\(visit.timestamp)"
         ]
         
         let valid = NSJSONSerialization.isValidJSONObject(jsonObject)
@@ -131,32 +136,41 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
         newItem.duration = " \(duration)"
         newItem.user = "gholden3"
         visits.append(newItem)
+        let indexPath = NSIndexPath(forRow: numVisits, inSection: 0)
+        let indexPaths = [indexPath]
+        tableView.insertRowsAtIndexPaths(indexPaths, withRowAnimation: .Automatic)
         sendVisitToServer(newItem)
     }
     
+    func dropGeofence( newLocation: CLLocation){
+        insideFence = true;
+        print("dropping")
+        let coord = newLocation.coordinate
+        let identifier = NSUUID().UUIDString
+        //var locationManager: CLLocationManager = CLLocationManager()
+        let geoRegion:CLCircularRegion = CLCircularRegion(center: coord, radius: 15.0, identifier: identifier)
+        //startMonitoringForRegion(_ region: CLRegion)
+        locationManager.startMonitoringForRegion(geoRegion)
+    }
+    
+    func pickupFence( oldFence: CLRegion){
+        print("picking up fence")
+        insideFence = false;
+        locationManager.stopMonitoringForRegion(oldFence)
+    }
+    
     func locationManager(manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) { //delegate method woo
-        print("updated location")
+        //print("updated location")
         lastLocationError = nil
         //extract data from location object
         let newLocation = locations.last! //locations is an array of CLLocation s
-        let lat:String = "\(newLocation.coordinate.latitude)"
-        let long:String = "\(newLocation.coordinate.longitude)"
-        //for now just put the timestamp from location into duration for visit
-        let dateFormatter = NSDateFormatter()
-        dateFormatter.dateStyle = .MediumStyle
-        let timestamp = newLocation.timestamp
-        let duration = dateFormatter.stringFromDate(timestamp)
-        let newItem = VisitItem()
-        newItem.coordinates = "lat: " + lat + "long: " + long
-        newItem.duration = duration
-        newItem.user = "gholden3"
-        visits.append(newItem)
-        tableView.reloadData()
-        sendVisitToServer(newItem)
-        
-        
+        //drop geofence
+        if(!insideFence){
+        print("not inside fence")
+        dropGeofence(newLocation)
+        }
         //println("visit: \(visit.coordinate.latitude),\(visit.coordinate.longitude)")
-        numVisits++
+        //numVisits++
         // 3
         //if new reading is more accurate (smaller error)
         // or this is the first location you are recieving
@@ -175,7 +189,43 @@ class VisitViewController: UITableViewController, CLLocationManagerDelegate {
         }*/
         
     }
+    
 
+    func locationManager(manager: CLLocationManager, didExitRegion region: CLRegion){
+        print("did exit region")
+        if region is CLCircularRegion{
+            let Cregion = region as! CLCircularRegion
+            print("hopped over the fence. ")
+            print("center: " + "\(Cregion.center)")
+            pickupFence(region)
+            //let lat:String = "\(region.center)"
+            //let long:String = "\(region.coordinate.longitude)"
+            //for now just put the timestamp from location into duration for visit
+            let dateFormatter = NSDateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss ZZZ";
+            let time = NSDate()
+            let timestamp = dateFormatter.stringFromDate(time)
+            let newItem = VisitItem()
+            //newItem.coordinates = "lat: " + lat + "long: " + long
+            newItem.coordinates = "\(Cregion.center)"
+            newItem.duration = "5"
+            newItem.user = "gholden3"
+            newItem.timestamp = "\(timestamp)"
+            visits.append(newItem)
+            let indexPath = NSIndexPath(forRow: numVisits, inSection: 0)
+            let indexPaths = [indexPath]
+            tableView.insertRowsAtIndexPaths(indexPaths, withRowAnimation: .Automatic)
+            //tableView.reloadData()
+            sendVisitToServer(newItem)
+            numVisits++
+        }
+    }
+    
+    func locationManager(manager: CLLocationManager,
+        monitoringDidFailForRegion region: CLRegion?,
+        withError error: NSError){
+        print("Region monitoring didFailWithError \(error)")
+    }
     
     func locationManager(manager: CLLocationManager, didFailWithError error: NSError) {
         print("didFailWithError \(error)")
